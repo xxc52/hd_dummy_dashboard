@@ -15,6 +15,69 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 
+# Horizon별 Feature 정보 (규칙 기반 하드코딩)
+COMMON_FEATURES = [
+    'rolling_mean_6', 'rolling_std_6', 'rolling_max_6',
+    'rolling_mean_27', 'rolling_std_27', 'rolling_max_27',
+    'AVG_SELL_UPRC_t-1', 'MAX_SELL_UPRC_t-1', 'MIN_SELL_UPRC_t-1',
+    'PCST_AMT_t-1', 'PRCH_QTY_t-1',
+    'RMRGN_RATE_t-1', 'RMRGN_t-1',
+    'SPR_AMT_t-1', 'TR_CNT_t-1', 'TSALE_AMT_t-1',
+    'lag_1', 'lag_2'
+]
+
+HORIZON_FEATURES = {
+    't+1': {
+        'lag': ['lag_6', 'lag_13', 'lag_20', 'lag_27'],
+        'weather': ['TEMP_AVG_t+1', 'HM_AVG_t+1', 'WIND_AVG_t+1', 'RN_DAY_t+1'],
+        'calendar': ['is_hd_holiday_t+1', 'is_weekend_t+1',
+                     'month_sin_t+1', 'month_cos_t+1',
+                     'day_sin_t+1', 'day_cos_t+1',
+                     'weekday_sin_t+1', 'weekday_cos_t+1'],
+        'holiday': ['holiday_korea_t-1_t+1', 'holiday_korea_t_t+1',
+                    'holiday_korea_t+1_t+1', 'holiday_christ_t-1_t+1',
+                    'holiday_christ_t_t+1', 'holiday_newyear_t-1_t+1',
+                    'holiday_newyear_t_t+1', 'holiday_etc_t+1']
+    },
+    't+2': {
+        'lag': ['lag_5', 'lag_12', 'lag_19', 'lag_26'],
+        'weather': ['TEMP_AVG_t+2', 'HM_AVG_t+2', 'WIND_AVG_t+2', 'RN_DAY_t+2'],
+        'calendar': ['is_hd_holiday_t+2', 'is_weekend_t+2',
+                     'month_sin_t+2', 'month_cos_t+2',
+                     'day_sin_t+2', 'day_cos_t+2',
+                     'weekday_sin_t+2', 'weekday_cos_t+2'],
+        'holiday': ['holiday_korea_t-1_t+2', 'holiday_korea_t_t+2',
+                    'holiday_korea_t+1_t+2', 'holiday_christ_t-1_t+2',
+                    'holiday_christ_t_t+2', 'holiday_newyear_t-1_t+2',
+                    'holiday_newyear_t_t+2', 'holiday_etc_t+2']
+    },
+    't+3': {
+        'lag': ['lag_4', 'lag_11', 'lag_18', 'lag_25'],
+        'weather': ['TEMP_AVG_t+3', 'HM_AVG_t+3', 'WIND_AVG_t+3', 'RN_DAY_t+3'],
+        'calendar': ['is_hd_holiday_t+3', 'is_weekend_t+3',
+                     'month_sin_t+3', 'month_cos_t+3',
+                     'day_sin_t+3', 'day_cos_t+3',
+                     'weekday_sin_t+3', 'weekday_cos_t+3'],
+        'holiday': ['holiday_korea_t-1_t+3', 'holiday_korea_t_t+3',
+                    'holiday_korea_t+1_t+3', 'holiday_christ_t-1_t+3',
+                    'holiday_christ_t_t+3', 'holiday_newyear_t-1_t+3',
+                    'holiday_newyear_t_t+3', 'holiday_etc_t+3']
+    },
+    't+4': {
+        'lag': ['lag_3', 'lag_10', 'lag_17', 'lag_24'],
+        'weather': ['TEMP_AVG_t+4', 'HM_AVG_t+4', 'WIND_AVG_t+4', 'RN_DAY_t+4'],
+        'calendar': ['is_hd_holiday_t+4', 'is_weekend_t+4',
+                     'month_sin_t+4', 'month_cos_t+4',
+                     'day_sin_t+4', 'day_cos_t+4',
+                     'weekday_sin_t+4', 'weekday_cos_t+4'],
+        'holiday': ['holiday_korea_t-1_t+4', 'holiday_korea_t_t+4',
+                    'holiday_korea_t+1_t+4', 'holiday_christ_t-1_t+4',
+                    'holiday_christ_t_t+4', 'holiday_newyear_t-1_t+4',
+                    'holiday_newyear_t_t+4', 'holiday_etc_t+4']
+    }
+}
+
+
 # System Prompt
 SYSTEM_PROMPT = """당신은 현대백화점 청과 수요 예측 시스템의 AI 어시스턴트입니다.
 발주 담당자의 질문에 친절하고 전문적으로 답변합니다.
@@ -89,12 +152,17 @@ class PredictionChatbot:
     def _initialize_client(self):
         """OpenAI 클라이언트 초기화"""
         if not OPENAI_AVAILABLE:
+            print("[Chatbot] openai package not installed")
             return
 
         try:
-            api_key = st.secrets.get("openai", {}).get("api_key")
-            if api_key:
+            # Streamlit secrets 접근 방식
+            if "openai" in st.secrets and "api_key" in st.secrets["openai"]:
+                api_key = st.secrets["openai"]["api_key"]
                 self.client = openai.OpenAI(api_key=api_key)
+                print("[Chatbot] OpenAI client initialized successfully")
+            else:
+                print("[Chatbot] OpenAI API key not found in secrets")
         except Exception as e:
             print(f"[Chatbot] OpenAI client initialization failed: {e}")
 
@@ -164,21 +232,21 @@ class PredictionChatbot:
 - 전주 대비: {trend.get('vs_prev_week', 'N/A')}
 """
 
-        # Feature 정보 (horizon별 변수 목록)
-        if context.get('feature_info'):
-            fi = context['feature_info']
-            if isinstance(fi, dict):
-                horizon = context.get('horizon', 'N/A')
-                result += f"""
+        # Feature 정보 (horizon별 변수 목록 - 규칙 기반 하드코딩)
+        horizon = context.get('horizon', 't+1')
+        if horizon in HORIZON_FEATURES:
+            hf = HORIZON_FEATURES[horizon]
+            total_count = len(COMMON_FEATURES) + len(hf['lag']) + len(hf['weather']) + len(hf['calendar']) + len(hf['holiday'])
+            result += f"""
 [{horizon} 예측에 사용된 변수 정보]
-- 총 변수 수: {fi.get('total_count', 'N/A')}개
-- 공통 변수 (lag, rolling 등): {len(fi.get('common_features', []))}개
-  예: {', '.join(fi.get('common_features', [])[:5])}...
-- 날씨 변수: {fi.get('weather_features', [])}
-- 캘린더 변수: {fi.get('calendar_features', [])}
-- 휴일 변수: {fi.get('holiday_features', [])}
-- Lag 변수 (horizon별 다름): {fi.get('lag_features', [])}
-- 타겟 변수: {fi.get('target', 'N/A')}
+- 총 변수 수: {total_count}개
+- 공통 변수 (rolling, 가격, lag_1/2 등): {len(COMMON_FEATURES)}개
+  예: {', '.join(COMMON_FEATURES[:5])}...
+- Lag 변수 (horizon별 다름): {hf['lag']}
+- 날씨 변수: {hf['weather']}
+- 캘린더 변수: {hf['calendar']}
+- 휴일 변수: {hf['holiday']}
+- 타겟 변수: target_{horizon}
 """
 
         return result
@@ -210,6 +278,7 @@ class PredictionChatbot:
             AI 응답
         """
         if not self.client:
+            print("[Chatbot] No client available, using fallback response")
             return self._get_fallback_response(user_message, context)
 
         try:
@@ -229,10 +298,9 @@ class PredictionChatbot:
             messages.append({"role": "user", "content": user_message})
 
             response = self.client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-5.1",
                 messages=messages,
-                temperature=0.7,
-                max_tokens=500
+                max_completion_tokens=500
             )
 
             return response.choices[0].message.content

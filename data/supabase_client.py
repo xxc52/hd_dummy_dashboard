@@ -300,13 +300,19 @@ def transform_supabase_to_display_df(
     # 대시보드 포맷으로 변환
     rows = []
     for idx, row in filtered_df.iterrows():
-        # top_features에서 예측 설명 생성
+        # top_features에서 Top 3 정렬하여 주요 영향 변수 생성
         short_reason = "-"
         if row.get('top_features'):
             top_features = row['top_features']
             if isinstance(top_features, dict) and top_features:
-                top_feature = list(top_features.keys())[0]
-                short_reason = f"주요 영향: {top_feature}"
+                # 절댓값 기준 정렬하여 Top 3 추출
+                sorted_features = sorted(
+                    top_features.items(),
+                    key=lambda x: abs(x[1]),
+                    reverse=True
+                )[:3]
+                top_3_names = [feat for feat, _ in sorted_features]
+                short_reason = ", ".join(top_3_names)
 
         rows.append({
             '순번': len(rows) + 1,

@@ -16,13 +16,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from components.chatbot import get_chatbot
 from data.supabase_client import (
-    get_latest_context_for_sku,
+    get_context_from_supabase,
     save_chat_history
 )
 import config
 
 
-def render_order_table(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
+def render_order_table(df: pd.DataFrame, horizon: int, prediction_date: str = None) -> pd.DataFrame:
     """
     발주의뢰 테이블 렌더링
 
@@ -32,6 +32,8 @@ def render_order_table(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
         예측 데이터가 포함된 발주 목록
     horizon : int
         예측 horizon (1~4)
+    prediction_date : str
+        예측 기준일 (YYYY-MM-DD 형식)
 
     Returns
     -------
@@ -53,7 +55,7 @@ def render_order_table(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
     # 테이블 헤더
     header_cols = st.columns([0.5, 1, 2, 0.7, 1, 1.2, 1.2, 1.2, 2, 0.8, 0.8, 1.5])
     headers = ['순번', '단품코드', '단품명', '단위', '의뢰수량',
-               '예측값', '예측_min', '예측_max', '예측설명', '상세', '챗봇', '비고']
+               '예측값', '예측_min', '예측_max', '주요 영향 변수', '상세', '챗봇', '비고']
 
     for col, header in zip(header_cols, headers):
         col.markdown(f"**{header}**")
@@ -103,7 +105,7 @@ def render_order_table(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
         # 예측_max
         cols[7].write(row['예측값_max'])
 
-        # 예측설명 (짧은 버전)
+        # 주요 영향 변수 (Top 3)
         cols[8].write(row['예측설명'])
 
         # 상세 리포트 토글
@@ -150,7 +152,7 @@ def render_order_table(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
 
         # 챗봇 확장 영역
         if sku_code in st.session_state.chat_rows:
-            render_chat_interface(sku_code, row['단품명'], horizon)
+            render_chat_interface(sku_code, row['단품명'], horizon, prediction_date)
 
         st.markdown("---")
 
@@ -160,7 +162,7 @@ def render_order_table(df: pd.DataFrame, horizon: int) -> pd.DataFrame:
     return updated_df
 
 
-def render_chat_interface(sku_code: str, sku_name: str, horizon: int = 1):
+def render_chat_interface(sku_code: str, sku_name: str, horizon: int = 1, prediction_date: str = None):
     """
     SKU별 챗봇 인터페이스 렌더링
 
@@ -172,18 +174,21 @@ def render_chat_interface(sku_code: str, sku_name: str, horizon: int = 1):
         단품명
     horizon : int
         예측 horizon (1~4)
+    prediction_date : str
+        예측 기준일 (YYYY-MM-DD 형식)
     """
     # 세션 ID 초기화
     if 'session_id' not in st.session_state:
         st.session_state.session_id = str(uuid.uuid4())[:8]
 
-    # Context 조회 (Supabase)
+    # Context 조회 (Supabase) - 선택된 prediction_date 기준
     context = None
-    if config.USE_SUPABASE:
+    if config.USE_SUPABASE and prediction_date:
         try:
-            context = get_latest_context_for_sku(
+            context = get_context_from_supabase(
                 store_cd='210',
                 sku_code=sku_code,
+                prediction_date=prediction_date,
                 horizon=f't+{horizon}'
             )
         except Exception as e:

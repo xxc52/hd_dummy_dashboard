@@ -127,7 +127,8 @@ def main():
         )
 
     # 테이블 렌더링
-    updated_df = render_order_table(df, filters['horizon'])
+    prediction_date_str = filters['base_date'].strftime('%Y-%m-%d')
+    updated_df = render_order_table(df, filters['horizon'], prediction_date_str)
 
     # 저장 버튼 (하단)
     st.markdown("---")
