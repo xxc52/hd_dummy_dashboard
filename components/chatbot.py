@@ -93,6 +93,10 @@ SYSTEM_PROMPT = """당신은 현대백화점 청과 수요 예측 시스템의 A
 - 숫자와 근거를 함께 제시
 - 발주 담당자 관점에서 실용적인 조언
 - 한국어로 답변
+
+중요:
+- SHAP 값(주요 영향 요인)을 언급할 때는 반드시 절댓값 기준 내림차순으로 1위, 2위, 3위 순서를 정확히 지켜서 답변하세요.
+- 제공된 SHAP Top 10 리스트의 순서가 정렬되어 있지 않을 수 있으니, 값의 크기를 직접 비교하여 순위를 정하세요.
 """
 
 # Feature 한글 매핑
@@ -212,12 +216,12 @@ class PredictionChatbot:
                     feature_name = FEATURE_DESCRIPTIONS.get(feature, feature)
                     result += f"{i}. {feature_name}: {value:.4f}\n"
 
-        # Feature 값
-        if context.get('feature_values'):
-            fv = context['feature_values']
+        # Feature 값 (top_features_values: SHAP Top 10의 실제 값)
+        if context.get('top_features_values'):
+            fv = context['top_features_values']
             if isinstance(fv, dict):
-                result += "\n[해당 시점 주요 Feature 값]\n"
-                for feature, value in list(fv.items())[:5]:
+                result += "\n[해당 시점 주요 Feature 값 (SHAP Top 10)]\n"
+                for feature, value in list(fv.items())[:10]:
                     feature_name = FEATURE_DESCRIPTIONS.get(feature, feature)
                     result += f"- {feature_name}: {value}\n"
 
